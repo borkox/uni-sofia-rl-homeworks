@@ -23,15 +23,17 @@ import math
     |-----|-----------------------|----------------------|--------------------|
 
 """
+
 # Makes dictionary of all possible combinations of each vector component and the respective index
 # {(0, 0, 0, 0): 0, (0, 0, 0, 1): 1 ... (2, 2, 5, 2): 161}
-ONE_HOT_COMBINATIONS = dict(zip(    product(range(3), range(3), range(6),range(3)), range(162)))
-X_DIM = len(ONE_HOT_COMBINATIONS) # 3*3*6*3 = 162
+#ONE_HOT_COMBINATIONS = dict(zip(    product(range(3), range(5), range(11),range(5)), range(3*5*11*5)))
+ONE_HOT_COMBINATIONS = dict(zip(    product(range(5), range(11),range(7)), range(5*11*7)))
+X_DIM = len(ONE_HOT_COMBINATIONS) # 3*5*6*3 = 270
 
-def on_hot_encode(observation) :
+def encode(observation) :
     cart_position = observation[0]
     cart_velocity = observation[1]
-    pole_angle    = abs(math.degrees(observation[2]))
+    pole_angle    = math.degrees(observation[2])
     pole_angle_velocity = observation[3]
 
     x_pos = 0
@@ -43,89 +45,101 @@ def on_hot_encode(observation) :
         x_pos = 2
 
     x_vel = 0
-    if cart_velocity < -0.5 :
+    if cart_velocity < -2 :
         x_vel = 0
-    if -0.5 < cart_velocity and cart_velocity <= 0.5 :
+    elif cart_velocity < -1 :
         x_vel = 1
-    if 0.5 < cart_velocity :
+    elif cart_velocity < 0:
         x_vel = 2
+    elif cart_velocity < 1:
+        x_vel = 3
+    else:
+        x_vel = 4
 
     th_angle = 0
-    if pole_angle < 1 :
+    #print (pole_angle)
+    if pole_angle < -6 :
         th_angle = 0
-    elif pole_angle < 2:
+    elif pole_angle < 4:
         th_angle = 1
-    elif pole_angle < 3 :
+    elif pole_angle < 2:
         th_angle = 2
-    elif pole_angle < 4 :
+    elif pole_angle < 1:
         th_angle = 3
-    elif pole_angle < 5 :
+    elif pole_angle < 0.5:
         th_angle = 4
-    else :
+    elif pole_angle < 0:
         th_angle = 5
+    elif pole_angle < 0.5:
+        th_angle = 6
+    elif pole_angle < 1:
+        th_angle = 7
+    elif pole_angle < 2:
+        th_angle = 8
+    elif pole_angle < 4:
+        th_angle = 9
+    else :
+        th_angle = 10
 
     th_vel = 0
-    if pole_angle_velocity < -0.5 :
+    if pole_angle_velocity < -2 :
         th_vel = 0
-    elif -0.5 < pole_angle_velocity and pole_angle_velocity <= 0.5 :
+    if pole_angle_velocity < -1 :
         th_vel = 1
-    elif  0.5 < pole_angle_velocity :
+    elif pole_angle_velocity < -0.5 :
         th_vel = 2
+    elif  pole_angle_velocity < 0:
+        th_vel = 3
+    elif  pole_angle_velocity < 0.5:
+        th_vel = 4
+    elif  pole_angle_velocity < 1:
+        th_vel = 5
+    else :
+        th_vel = 6
     # Make one hot encoded
     arr = np.zeros(len(ONE_HOT_COMBINATIONS), dtype='int32')
-    print (f"x_pos={x_pos}, x_vel={x_vel}, th_angle={th_angle}, th_vel={th_vel}, x={ONE_HOT_COMBINATIONS[(x_pos,x_vel,th_angle,th_vel)]}")
-    arr[ONE_HOT_COMBINATIONS[(x_pos,x_vel,th_angle,th_vel)]] = 1
-    return arr
+    #print (f"x_pos={x_pos}, x_vel={x_vel}, th_angle={th_angle}, th_vel={th_vel}, x={ONE_HOT_COMBINATIONS[(x_pos,x_vel,th_angle,th_vel)]}")
+    return ONE_HOT_COMBINATIONS[(x_vel,th_angle,th_vel)]
 
 
-#exit()
 #
 # Description of the environment:
 #   https://github.com/openai/gym/blob/master/gym/envs/classic_control/cartpole.py
 env = gym.make('CartPole-v1')
-
-E = np.zeros(X_DIM)
-alpha = 0.01
-reward = 0
-delta = 0.95
-gamma = 0.01
-beta = 0.01
-lamda = 0.95
-
-p_t_prev = 0
-
-V = np.random.rand(X_DIM)/X_DIM
-X_DASH = np.random.rand(X_DIM)/X_DIM
-W = np.random.rand(X_DIM)/X_DIM
-p_t = 0
-
-for i_episode in range(1200):
-    observation = env.reset()
-    for t in range(100):
+Q = np.zeros([X_DIM,env.action_space.n])
+# 2. Parameters of Q-learning
+eta = .628
+gma = .9
+epis = 5000
+rev_list = [] # rewards per episode calculate
+for i in range(epis):
+    # Reset environment
+    s = env.reset()
+    s = encode(s)
+    rAll = 0
+    d = False
+    j = 0
+    #The Q-Table learning algorithm
+    while j < 200:
         env.render()
-        #print(observation)
-        X = on_hot_encode(observation)
-        p_t_prev = p_t
-        p_t = np.dot(X, V)
-        r_t_hat = reward + gamma*p_t - p_t_prev
-        V = V + beta*r_t_hat*X_DASH
-        X_DASH = lamda*X_DASH + (1-lamda)*X_DASH
-
-        # 1 - right; 0 - left
-        noise = (np.random.rand()-0.5)/100
-        y_t = np.dot(X_DASH, W)#+noise
-        f_z = 1 if y_t >= 0 else 0
-
-        W = W + alpha*reward*E
-        E = delta * E + (1-delta)*y_t*X
-
-        #action = env.action_space.sample()
-        action = np.array(f_z)
-        #print (f" action: {action}")
-        #print (f" W: {W}")
-        observation, reward, done, info = env.step(action)
-        if done:
-            print("Episode finished after {} timesteps".format(t+1))
+        j+=1
+        # Choose action from Q table
+        a = np.argmax(Q[s,:] + np.random.randn(1,env.action_space.n)*(1./(i+1)))
+        #Get new state & reward from environment
+        observation,r,d,_ = env.step(a)
+        s1 = encode(observation)
+        #Update Q-Table with new knowledge
+        Q[s,a] = Q[s,a] + eta*(r + gma*np.max(Q[s1,:]) - Q[s,a])
+        rAll += r
+        s = s1
+        if d == True:
+            print(f"Steps for episode: {j} last observation={observation}")
             break
-env.close()
+    if j==200:
+       print ("Win")
+    rev_list.append(rAll)
+    env.render()
+print("Reward Sum on all episodes " + str(sum(rev_list)/epis))
+print("Final Values Q-Table")
+print(Q)
 

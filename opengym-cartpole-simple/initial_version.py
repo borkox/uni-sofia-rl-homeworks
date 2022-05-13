@@ -1,5 +1,6 @@
 import numpy as np
 import gym
+from itertools import product
 
 """
     ### Action Space
@@ -22,6 +23,9 @@ import gym
 
 """
 X_DIM = 162 # 3*3*6*3
+# Makes dictionary of all possible combinations of each vector component and the respective index
+# {(0, 0, 0, 0): 0, (0, 0, 0, 1): 1 ... (2, 2, 5, 2): 161}
+ONE_HOT_COMBINATIONS = dict(zip(    product(range(3), range(3), range(6),range(3)), range(162)))
 def on_hot_encode(observation) :
     cart_position = observation[0]
     cart_velocity = observation[1]
@@ -38,37 +42,37 @@ def on_hot_encode(observation) :
 
     x_vel = 0
     if cart_velocity < -0.5 :
-        x_vel = 1
+        x_vel = 0
     if -0.5 < cart_velocity and cart_velocity <= 0.5 :
-        x_vel = 2
+        x_vel = 1
     if 0.5 < cart_velocity :
-        x_vel = 3
+        x_vel = 2
 
     th_angle = 0
     if pole_angle < -6 :
-        th_angle = 1
+        th_angle = 0
     if -6 < pole_angle and pole_angle <= -1 :
-        th_angle = 2
+        th_angle = 1
     if -1 < pole_angle and pole_angle <= 0 :
-        th_angle = 3
+        th_angle = 2
     if 0 < pole_angle and pole_angle <= 1 :
-        th_angle = 4
+        th_angle = 3
     if 1 < pole_angle and pole_angle <= 6 :
-        th_angle = 5
+        th_angle = 4
     if 6 < pole_angle :
-        th_angle = 6
+        th_angle = 5
 
     th_vel = 0
     if pole_angle_velocity < -20 :
-        th_vel = 1
+        th_vel = 0
     if -20 < pole_angle_velocity and pole_angle_velocity <= 20 :
-        th_vel = 2
+        th_vel = 1
     if 20 < pole_angle_velocity :
-        th_vel = 3
+        th_vel = 2
     # Make one hot encoded
     arr = np.zeros(X_DIM, dtype='int32')
     #print (f"x_pos={x_pos}, x_vel={x_vel}, th_angle={th_angle}, th_vel={th_vel}, x={x_pos*x_vel*th_angle*th_vel - 1}")
-    arr[x_pos*x_vel*th_angle*th_vel - 1] = 1
+    arr[ONE_HOT_COMBINATIONS[(x_pos,x_vel,th_angle,th_vel)]] = 1
     return arr
 
 
@@ -81,7 +85,7 @@ env = gym.make('CartPole-v1')
 E = np.zeros(X_DIM)
 alpha = 0.0001
 reward = 0
-delta = 0.0001
+delta = 0.1
 noise_denominator = 50
 
 W = np.random.rand(X_DIM)/X_DIM
@@ -93,7 +97,7 @@ for i_episode in range(800):
         #print(observation)
         X = on_hot_encode(observation)
         noise = (np.random.rand()-0.5)/noise_denominator
-        # 1 - right; -1 - left
+        # 1 - right; 0 - left
         y_t = np.dot(X, W)+noise
         f_z = 1 if y_t >= 0 else 0
 
