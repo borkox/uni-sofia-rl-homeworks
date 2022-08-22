@@ -31,7 +31,7 @@ X_DIM = len(ONE_HOT_COMBINATIONS) # 3*3*6*3 = 162
 def on_hot_encode(observation) :
     cart_position = observation[0]
     cart_velocity = observation[1]
-    pole_angle    = abs(math.degrees(observation[2]))
+    pole_angle    = math.degrees(observation[2])
     pole_angle_velocity = observation[3]
 
     x_pos = 0
@@ -51,29 +51,29 @@ def on_hot_encode(observation) :
         x_vel = 2
 
     th_angle = 0
-    if pole_angle < 1 :
+    if pole_angle < -6 :
         th_angle = 0
-    elif pole_angle < 2:
+    elif pole_angle < -1:
         th_angle = 1
-    elif pole_angle < 3 :
+    elif pole_angle < 0 :
         th_angle = 2
-    elif pole_angle < 4 :
+    elif pole_angle < 1 :
         th_angle = 3
-    elif pole_angle < 5 :
+    elif pole_angle < 6 :
         th_angle = 4
     else :
         th_angle = 5
 
     th_vel = 0
-    if pole_angle_velocity < -0.5 :
+    if pole_angle_velocity < -0.872 :
         th_vel = 0
-    elif -0.5 < pole_angle_velocity and pole_angle_velocity <= 0.5 :
+    elif -0.872 < pole_angle_velocity and pole_angle_velocity <= 0.872 :
         th_vel = 1
-    elif  0.5 < pole_angle_velocity :
+    elif  0.872 < pole_angle_velocity :
         th_vel = 2
     # Make one hot encoded
     arr = np.zeros(len(ONE_HOT_COMBINATIONS), dtype='int32')
-    print (f"x_pos={x_pos}, x_vel={x_vel}, th_angle={th_angle}, th_vel={th_vel}, x={ONE_HOT_COMBINATIONS[(x_pos,x_vel,th_angle,th_vel)]}")
+    #print (f"x_pos={x_pos}, x_vel={x_vel}, th_angle={th_angle}, th_vel={th_vel}, x={ONE_HOT_COMBINATIONS[(x_pos,x_vel,th_angle,th_vel)]}")
     arr[ONE_HOT_COMBINATIONS[(x_pos,x_vel,th_angle,th_vel)]] = 1
     return arr
 
@@ -85,12 +85,12 @@ def on_hot_encode(observation) :
 env = gym.make('CartPole-v1')
 
 E = np.zeros(X_DIM)
-alpha = 0.01
+alpha = 0.1
 reward = 0
-delta = 0.95
-gamma = 0.01
-beta = 0.01
-lamda = 0.95
+delta = 0.9
+gamma = 0.95
+beta = 0.5
+lamda = 0.8
 
 p_t_prev = 0
 
@@ -101,6 +101,7 @@ p_t = 0
 
 for i_episode in range(1200):
     observation = env.reset()
+    done = False
     for t in range(100):
         env.render()
         #print(observation)
@@ -119,13 +120,15 @@ for i_episode in range(1200):
         W = W + alpha*reward*E
         E = delta * E + (1-delta)*y_t*X
 
+        if done:
+                print("Episode finished after {} timesteps".format(t+1))
+                break
         #action = env.action_space.sample()
         action = np.array(f_z)
         #print (f" action: {action}")
         #print (f" W: {W}")
         observation, reward, done, info = env.step(action)
-        if done:
-            print("Episode finished after {} timesteps".format(t+1))
-            break
+        #reward -= 1
+
 env.close()
 

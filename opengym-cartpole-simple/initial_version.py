@@ -1,6 +1,7 @@
 import numpy as np
 import gym
 from itertools import product
+import math
 
 """
     ### Action Space
@@ -29,11 +30,11 @@ ONE_HOT_COMBINATIONS = dict(zip(    product(range(3), range(3), range(6),range(3
 def on_hot_encode(observation) :
     cart_position = observation[0]
     cart_velocity = observation[1]
-    pole_angle    = observation[2]
+    pole_angle    = math.degrees(observation[2])
     pole_angle_velocity = observation[3]
 
     x_pos = 0
-    if -2.4 < cart_position and cart_position <= -0.8 :
+    if cart_position <= -0.8 :
         x_pos = 0
     if -0.8 < cart_position and cart_position <= 0.8 :
         x_pos = 1
@@ -49,29 +50,29 @@ def on_hot_encode(observation) :
         x_vel = 2
 
     th_angle = 0
-    if pole_angle < -6 :
+    if pole_angle < -12 :
         th_angle = 0
-    if -6 < pole_angle and pole_angle <= -1 :
+    elif pole_angle < -6:
         th_angle = 1
-    if -1 < pole_angle and pole_angle <= 0 :
+    elif pole_angle < -1 :
         th_angle = 2
-    if 0 < pole_angle and pole_angle <= 1 :
+    elif pole_angle < 0 :
         th_angle = 3
-    if 1 < pole_angle and pole_angle <= 6 :
+    elif pole_angle < 6 :
         th_angle = 4
-    if 6 < pole_angle :
+    else :
         th_angle = 5
 
     th_vel = 0
-    if pole_angle_velocity < -20 :
+    if pole_angle_velocity < -0.872 :
         th_vel = 0
-    if -20 < pole_angle_velocity and pole_angle_velocity <= 20 :
+    elif -0.872 < pole_angle_velocity and pole_angle_velocity <= 0.872 :
         th_vel = 1
-    if 20 < pole_angle_velocity :
+    elif  0.872 < pole_angle_velocity :
         th_vel = 2
     # Make one hot encoded
-    arr = np.zeros(X_DIM, dtype='int32')
-    #print (f"x_pos={x_pos}, x_vel={x_vel}, th_angle={th_angle}, th_vel={th_vel}, x={x_pos*x_vel*th_angle*th_vel - 1}")
+    arr = np.zeros(len(ONE_HOT_COMBINATIONS), dtype='int32')
+    print (f"x_pos={x_pos}, x_vel={x_vel}, th_angle={th_angle}, th_vel={th_vel}, x={ONE_HOT_COMBINATIONS[(x_pos,x_vel,th_angle,th_vel)]}")
     arr[ONE_HOT_COMBINATIONS[(x_pos,x_vel,th_angle,th_vel)]] = 1
     return arr
 
@@ -83,10 +84,10 @@ def on_hot_encode(observation) :
 env = gym.make('CartPole-v1')
 
 E = np.zeros(X_DIM)
-alpha = 0.0001
+alpha = 0.1
 reward = 0
 delta = 0.1
-noise_denominator = 50
+noise_denominator = 300
 
 W = np.random.rand(X_DIM)/X_DIM
 
