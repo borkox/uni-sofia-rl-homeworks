@@ -14,7 +14,7 @@ import numpy as np
 # discount factor for future utilities
 GAMA = 0.8
 # number of episodes to run
-NUM_EPISODES = 8
+NUM_EPISODES = 10
 # max steps per episode
 MAX_STEPS = 10000
 # score agent needs for environment to be solved
@@ -34,12 +34,12 @@ nest.ResetKernel()
 SNc_vt = nest.Create('volume_transmitter')
 
 STATE = nest.Create("iaf_psc_alpha", 4, {"I_e": 10.0})
-V      = nest.Create("iaf_psc_alpha", 40, {"I_e": 30.0})
-SNc     = nest.Create("iaf_psc_alpha", 40, {"I_e": 150.0})
-SNr_L     = nest.Create("iaf_psc_alpha", 10, {"I_e": 100.0})
-SNr_R     = nest.Create("iaf_psc_alpha", 10, {"I_e": 100.0})
-ACTION_L  = nest.Create("iaf_psc_alpha", 2, {"I_e": 700.0})
-ACTION_R  = nest.Create("iaf_psc_alpha", 2, {"I_e": 700.0})
+V      = nest.Create("iaf_psc_alpha", 100, {"I_e": 30.0})
+SNc     = nest.Create("iaf_psc_alpha", 100, {"I_e": 0.0})
+SNr_L     = nest.Create("iaf_psc_alpha", 100, {"I_e": 100.0})
+SNr_R     = nest.Create("iaf_psc_alpha", 100, {"I_e": 100.0})
+ACTION_L  = nest.Create("iaf_psc_alpha", 50, {"I_e": 700.0})
+ACTION_R  = nest.Create("iaf_psc_alpha", 50, {"I_e": 700.0})
 
 
 dc_generator_reward = nest.Create('dc_generator', 1, {"amplitude": 20.})
@@ -59,7 +59,7 @@ spike_recorder_ACTION_R = nest.Create('spike_recorder')
 nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', \
                { 'vt': SNc_vt.get('global_id'), \
                 #'A_plus': 1, 'A_minus': 0.0001, \
-                'Wmin': -2000.0, 'Wmax':2000.0})
+                'Wmin': -30000.0, 'Wmax':30000.0})
 
 nest.Connect(dc_generator_env, STATE, 'one_to_one',
             syn_spec={'weight': 50 })
@@ -99,9 +99,9 @@ nest.Connect(SNr_L, ACTION_L,
             syn_spec={'weight': 150.0 })
 nest.Connect(SNr_R, ACTION_R,
             syn_spec={'weight': 150.0 })
-nest.Connect(ACTION_L, ACTION_R,
+nest.Connect(SNr_L, SNr_R,
             syn_spec={'weight': -5.0 })
-nest.Connect(ACTION_R, ACTION_L,
+nest.Connect(SNr_R, SNr_L,
             syn_spec={'weight': -5.0 })
 
 
