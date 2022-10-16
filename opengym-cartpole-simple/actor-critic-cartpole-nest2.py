@@ -104,6 +104,11 @@ nest.Connect(SNr_L, SNr_R,
 nest.Connect(SNr_R, SNr_L,
             syn_spec={'weight': -5.0 })
 
+nest.Connect(ACTION_L, STATE,
+            syn_spec={'weight': 50. })
+nest.Connect(ACTION_R, STATE,
+            syn_spec={'weight': 50. })
+
 
 nest.Connect(voltmeter_STATE, STATE)
 nest.Connect(voltmeter_V, V)
