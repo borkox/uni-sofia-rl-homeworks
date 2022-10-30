@@ -26,7 +26,19 @@ STEP = 30
 
 scaler = scp.MinMaxScaler(feature_range=(0, 1), copy=True, clip=True)
 # See https://www.gymlibrary.dev/environments/classic_control/cart_pole/#observation-space
-scaler.fit([[-0.8,-1.5,-0.3,-3],[+0.8,+1.5,+0.3,+3]])
+scaler.fit([[0,0,0,0,0,0,0,0],[+0.5,+0.5,+1.5,+1.5,+0.3,+0.3,+3,+3]])
+def transform_state(s):
+  transformed = np.array([
+       abs(s[0]) if s[0] > 0 else 0,
+       abs(s[0]) if s[0] < 0 else 0,
+       abs(s[1]) if s[1] > 0 else 0,
+       abs(s[1]) if s[1] < 0 else 0,
+       abs(s[2]) if s[2] > 0 else 0,
+       abs(s[2]) if s[2] < 0 else 0,
+       abs(s[3]) if s[3] > 0 else 0,
+       abs(s[3]) if s[3] < 0 else 0 ])
+#   print("Converting state: ", s, " ==> ", transformed)
+  return transformed
 
 #================================================
 nest.set_verbosity("M_WARNING")
@@ -35,7 +47,7 @@ nest.ResetKernel()
 
 SNc_vt = nest.Create('volume_transmitter')
 
-STATE = nest.Create("iaf_psc_alpha", 4, {"I_e": 10.0})
+STATE = nest.Create("iaf_psc_alpha", 50, {"I_e": 10.0})
 V      = nest.Create("iaf_psc_alpha", 50, {"I_e": 30.0})
 SNc     = nest.Create("iaf_psc_alpha", 40, {"I_e": 150.0})
 SNr_L     = nest.Create("iaf_psc_alpha", 10, {"I_e": 100.0})
@@ -46,7 +58,7 @@ ACTION_R  = nest.Create("iaf_psc_alpha", 2, {"I_e": 700.0})
 
 # NOISE  = nest.Create("dc_generator", 50, {"amplitude": 0.0})
 dc_generator_reward = nest.Create('dc_generator', 1, {"amplitude": 20.})
-dc_generator_env = nest.Create('dc_generator', 4, {"amplitude": 50.})
+dc_generator_env = nest.Create('dc_generator', 8, {"amplitude": 50.})
 voltmeter_STATE = nest.Create("voltmeter")
 voltmeter_V = nest.Create("voltmeter")
 voltmeter_SNc = nest.Create("voltmeter")
@@ -66,7 +78,8 @@ nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', \
                                            'tau_n': 200.0,
                                            'tau_plus': 20.0})
 
-nest.Connect(dc_generator_env, STATE, 'one_to_one',
+nest.Connect(dc_generator_env, STATE,
+            conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.5},
             syn_spec={'weight': 50 })
 
 # nest.Connect(NOISE, V, \
@@ -170,7 +183,7 @@ for episode in range(NUM_EPISODES):
 
     amplitude_I_reward = min(step * 0.01 * 50, 50 )
     print("Setting amplitude for reward: ", amplitude_I_reward, "     step: ", step)
-    nest.SetStatus(dc_generator_reward, {"start":step*STEP, "stop":(step+1)*STEP, "amplitude": amplitude_I_reward})
+    nest.SetStatus(dc_generator_reward, { "amplitude": amplitude_I_reward})
     #nest.SetStatus(NOISE, {"start":step*STEP, "stop":(step+1)*STEP, "amplitude": random.randint(-50,50)})
 
     env.render()
@@ -192,10 +205,12 @@ for episode in range(NUM_EPISODES):
     # step with action
     #print(env.step(action))
     new_state, reward, done, _ = env.step(action)
+    new_transformed_state = transform_state(new_state)
 
     print("new_state:", new_state)
-    new_state_scaled = scaler.transform(new_state.reshape(1,-1)).reshape(-1)
-    print("new_state_scaled:", new_state_scaled)
+    print("new_transformed_state", new_transformed_state)
+    new_transformed_state_scaled = scaler.transform(new_transformed_state.reshape(1,-1)).reshape(-1)
+    print("new_transformed_state_scaled:", new_transformed_state_scaled)
 
     # Hack reward
     #reward = 1- abs(new_state_scaled[2])
@@ -203,7 +218,7 @@ for episode in range(NUM_EPISODES):
         for i in range(0,10) :
           reward = -1
           step = step + 1
-          nest.SetStatus(dc_generator_reward, {"start":step*STEP, "stop":(step+1)*STEP, "amplitude": -100.})
+          nest.SetStatus(dc_generator_reward, { "amplitude": -100.})
 #           nest.SetStatus(NOISE, {"start":step*STEP, "stop":(step+1)*STEP, "amplitude": random.randint(0,50)})
           nest.Simulate(STEP)
 
@@ -211,7 +226,7 @@ for episode in range(NUM_EPISODES):
 
     print("reward:", reward)
 
-    dc_environment_current =  (np.exp(new_state_scaled)-1)*100.
+    dc_environment_current =  (np.exp(new_transformed_state_scaled)-1)*100.
     print("applying environment amplitude:", dc_environment_current)
     # Adjusting the generators to reflect environment
     nest.SetStatus(dc_generator_env, {"amplitude": dc_environment_current})
