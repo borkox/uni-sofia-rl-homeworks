@@ -14,7 +14,7 @@ import numpy as np
 # discount factor for future utilities
 GAMA = 0.9
 # number of episodes to run
-NUM_EPISODES = 30
+NUM_EPISODES = 50
 # max steps per episode
 MAX_STEPS = 10000
 # score agent needs for environment to be solved
@@ -49,7 +49,7 @@ nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', \
                 'Wmin': -30000.0, 'Wmax':30000.0})
 
 nest.Connect(dc_generator_env, STATE,
-             conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.5},
+
             syn_spec={'weight': 20 })
 
 nest.Connect(STATE, V,
@@ -66,10 +66,10 @@ nest.Connect(SNc, SNc_vt,'all_to_all')
 
 
 # Value function V(t)
-nest.Connect(V, SNc, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8},
+nest.Connect(V, SNc,
              syn_spec={'weight': -220.0, "delay": 1.0,'synapse_model': 'dopsyn'})
 # Value function V(t+1)
-nest.Connect(V, SNc, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8},
+nest.Connect(V, SNc,
              syn_spec={'weight': GAMA*220.0, "delay": 2., 'synapse_model': 'dopsyn'})
 
 nest.Connect(STATE, spike_recorder_STATE)
@@ -87,12 +87,12 @@ action_right = nest.Create("iaf_psc_alpha", num_neurons)
 wta_inhibitory = nest.Create("iaf_psc_alpha", num_neurons)
 all_actor_neurons = action_left + action_right
 #n_input = nest.Create("poisson_generator", 10, {'rate': 3000.0})
-nest.Connect(STATE, action_left, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8}, syn_spec={'weight': noise_weights})
-nest.Connect(STATE, action_right, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8}, syn_spec={'weight': noise_weights})
-nest.Connect(STATE, wta_inhibitory, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8}, syn_spec={'weight': noise_weights * 0.9})
-nest.Connect(V, action_left, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8}, syn_spec={'weight': noise_weights, 'synapse_model': 'dopsyn'})
-nest.Connect(V, action_right, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8}, syn_spec={'weight': noise_weights, 'synapse_model': 'dopsyn'})
-nest.Connect(V, wta_inhibitory, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8}, syn_spec={'weight': noise_weights * 0.9, 'synapse_model': 'dopsyn'})
+nest.Connect(STATE, action_left, syn_spec={'weight': noise_weights})
+nest.Connect(STATE, action_right, syn_spec={'weight': noise_weights})
+nest.Connect(STATE, wta_inhibitory, syn_spec={'weight': noise_weights * 0.9})
+nest.Connect(V, action_left, syn_spec={'weight': noise_weights, 'synapse_model': 'dopsyn'})
+nest.Connect(V, action_right, syn_spec={'weight': noise_weights, 'synapse_model': 'dopsyn'})
+nest.Connect(V, wta_inhibitory, syn_spec={'weight': noise_weights * 0.9, 'synapse_model': 'dopsyn'})
 nest.Connect(action_left, action_left, 'all_to_all', {'weight': ex_weights})
 nest.Connect(action_right, action_right, 'all_to_all', {'weight': ex_weights})
 nest.Connect(all_actor_neurons, wta_inhibitory, 'all_to_all', {'weight': ex_inh_weights})
