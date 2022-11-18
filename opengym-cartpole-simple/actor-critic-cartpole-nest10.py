@@ -13,7 +13,7 @@ import numpy as np
 # discount factor for future utilities
 GAMA = 0.8
 # number of episodes to run
-NUM_EPISODES = 90
+NUM_EPISODES = 330
 # max steps per episode
 MAX_STEPS = 10000
 # score agent needs for environment to be solved
@@ -35,9 +35,8 @@ SNc_vt = nest.Create('volume_transmitter')
 STATE = nest.Create("iaf_psc_alpha", 80, {"I_e": 130.0})
 V = nest.Create("iaf_psc_alpha", 40, {"I_e": 30.0})
 POLICY = nest.Create("iaf_psc_alpha", 40, {"I_e": 30.0})
-# PD = nest.Create("iaf_psc_alpha", 15, {"I_e": 30.0})
 SNc = nest.Create("iaf_psc_alpha", 8, {"I_e": 10.0})
-sigma = nest.Create("poisson_generator", 10, {'rate': 300.0})
+sigma = nest.Create("poisson_generator", 10, {'rate': 500.0})
 
 dc_generator_reward = nest.Create('dc_generator', 8, {"amplitude": 0.})
 dc_generator_env = nest.Create('dc_generator', 8, {"amplitude": 0.})
@@ -59,7 +58,7 @@ nest.Connect(STATE, STATE,
              syn_spec={'weight': 1})
 
 nest.Connect(sigma, STATE,
-             syn_spec={'weight': 0.5})
+             syn_spec={'weight': 0.7})
 
 nest.Connect(STATE[40:], V, \
              conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.5},
@@ -67,10 +66,10 @@ nest.Connect(STATE[40:], V, \
                  "weight": nest.random.uniform(min=-20., max=45.),
                  'synapse_model': 'dopsyn'})
 
-nest.Connect(STATE[0:40], POLICY, \
-             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
+nest.Connect(STATE[0:40], POLICY,
+             conn_spec={'rule': 'fixed_indegree', 'indegree': 14},
              syn_spec={
-                 "weight": nest.random.uniform(min=-20., max=45.),
+                 "weight": nest.random.uniform(min=-30., max=55.),
                  'synapse_model': 'dopsyn'})
 
 nest.Connect(dc_generator_reward, SNc, 'one_to_one',
@@ -81,17 +80,11 @@ nest.Connect(SNc, SNc_vt, 'all_to_all')
 
 # Value function V(t)
 nest.Connect(V, SNc, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8},
-             syn_spec={'weight': -220.0, "delay":  STEP+REST_TIME + 1.0})
+             syn_spec={'weight': -220.0, "delay":  STEP + REST_TIME + 1.0})
 # Value function V(t+1)
 nest.Connect(V, SNc, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8},
              syn_spec={'weight': GAMA * 220.0, "delay":   1.})
 
-# nest.Connect(POLICY, PD, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8},
-#              syn_spec={'weight': nest.random.uniform(min=-30., max=-10.), "delay": 1.0})
-# nest.Connect(POLICY, PD, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8},
-#              syn_spec={'weight': nest.random.uniform(min=50., max=85.), "delay": STEP+REST_TIME+1.0})
-# nest.Connect(PD, STATE[0:10], conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8},
-#              syn_spec={'weight': 220.0, "delay": STEP+REST_TIME+.0})
 
 
 nest.Connect(STATE, spike_recorder_STATE)
@@ -101,7 +94,7 @@ nest.Connect(SNc, spike_recorder_SNc)
 
 # =============================================================
 num_neurons = 50
-noise_weights = 20
+noise_weights = 40
 ex_weights = 10.5
 inh_weights = -2.6
 ex_inh_weights = 2.8
@@ -193,7 +186,7 @@ for episode in range(NUM_EPISODES):
 
         # REWARD
         #     print("state: ", state)
-        new_reward = max(10 * math.cos(17 * state[2]), 0)
+        new_reward = reward * 100 # max(10 * math.cos(17 * state[2]), 0)
         # print("New reward : ", new_reward)
         amplitude_I_reward = new_reward
         #     print("Setting amplitude for reward: ", amplitude_I_reward, "     step: ", step)
@@ -229,12 +222,12 @@ for episode in range(NUM_EPISODES):
 
         new_state, reward, done, _ = env.step(action)
 
-        if done:
-            for i in range(0, 1):
-                step = step + 1
-                nest.SetStatus(dc_generator_reward, {"amplitude": -10.})
-                nest.Simulate(STEP + REST_TIME)
-                time += STEP + REST_TIME
+        # if done:
+        #     for i in range(0, 2):
+        #         step = step + 1
+        #         nest.SetStatus(dc_generator_reward, {"amplitude": -5.})
+        #         nest.Simulate(STEP + REST_TIME)
+        #         time += STEP + REST_TIME
 
         #     print("reward:", reward)
 
@@ -257,6 +250,7 @@ for episode in range(NUM_EPISODES):
     # early stopping if we meet solved score goal
     if np.array(recent_scores).mean() >= SOLVED_SCORE:
         break
+
 
 np.savetxt('outputs/scores.txt', scores, delimiter=',')
 
