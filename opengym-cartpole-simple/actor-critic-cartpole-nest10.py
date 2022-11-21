@@ -10,10 +10,13 @@ import nest.voltage_trace
 import matplotlib.pyplot as plt
 import numpy as np
 
+seed = np.random.randint(0, 1000000)
+nest.SetKernelStatus({'rng_seed': seed})
+
 # discount factor for future utilities
 GAMA = 0.8
 # number of episodes to run
-NUM_EPISODES = 330
+NUM_EPISODES = 500
 # max steps per episode
 MAX_STEPS = 10000
 # score agent needs for environment to be solved
@@ -22,9 +25,9 @@ SOLVED_SCORE = 195
 time = 0
 STEP = 40
 REST_TIME = 50
-scaler = scp.MinMaxScaler(feature_range=(0.01, 0.99), copy=True, clip=True)
+scaler = scp.MinMaxScaler(feature_range=(0.01, 1), copy=True, clip=True)
 # See https://www.gymlibrary.dev/environments/classic_control/cart_pole/#observation-space
-scaler.fit([[0, 0, 0, 0, 0, 0, 0, 0], [+1.5, +1.5, +1.5, +1.5, +0.2, +0.2, +2.1, +2.1]])
+scaler.fit([[0, 0, 0, 0, 0, 0, 0, 0], [+1.5, +1.5, +1.5, +1.5, +0.13, +0.13, +2.1, +2.1]])
 
 # ================================================
 nest.set_verbosity("M_WARNING")
@@ -35,8 +38,8 @@ SNc_vt = nest.Create('volume_transmitter')
 STATE = nest.Create("iaf_psc_alpha", 80, {"I_e": 130.0})
 V = nest.Create("iaf_psc_alpha", 40, {"I_e": 30.0})
 POLICY = nest.Create("iaf_psc_alpha", 40, {"I_e": 30.0})
+# PD = nest.Create("iaf_psc_alpha", 15, {"I_e": 30.0})
 SNc = nest.Create("iaf_psc_alpha", 8, {"I_e": 10.0})
-sigma = nest.Create("poisson_generator", 10, {'rate': 500.0})
 
 dc_generator_reward = nest.Create('dc_generator', 8, {"amplitude": 0.})
 dc_generator_env = nest.Create('dc_generator', 8, {"amplitude": 0.})
@@ -47,7 +50,10 @@ spike_recorder_SNc = nest.Create('spike_recorder')
 nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', \
                {'vt': SNc_vt.get('global_id'), \
                 'A_plus': 0.01, 'A_minus': 0.01, \
-                'Wmin': -1000.0, 'Wmax': 1000.0})
+                'Wmin': -3000.0, 'Wmax': 3000.0,
+                'tau_c': 3 * (STEP + REST_TIME),
+                'tau_n': 2 * (STEP + REST_TIME),
+                'tau_plus': 20.0})
 
 nest.Connect(dc_generator_env, STATE,
              conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.5},
@@ -57,19 +63,16 @@ nest.Connect(STATE, STATE,
              conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.1},
              syn_spec={'weight': 1})
 
-nest.Connect(sigma, STATE,
-             syn_spec={'weight': 0.7})
-
 nest.Connect(STATE[40:], V, \
              conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.5},
              syn_spec={
                  "weight": nest.random.uniform(min=-20., max=45.),
                  'synapse_model': 'dopsyn'})
 
-nest.Connect(STATE[0:40], POLICY,
-             conn_spec={'rule': 'fixed_indegree', 'indegree': 14},
+nest.Connect(STATE[0:40], POLICY, \
+             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
              syn_spec={
-                 "weight": nest.random.uniform(min=-30., max=55.),
+                 "weight": nest.random.uniform(min=-20., max=45.),
                  'synapse_model': 'dopsyn'})
 
 nest.Connect(dc_generator_reward, SNc, 'one_to_one',
@@ -80,11 +83,10 @@ nest.Connect(SNc, SNc_vt, 'all_to_all')
 
 # Value function V(t)
 nest.Connect(V, SNc, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8},
-             syn_spec={'weight': -220.0, "delay":  STEP + REST_TIME + 1.0})
+             syn_spec={'weight': -220.0, "delay":  STEP+REST_TIME + 1.0})
 # Value function V(t+1)
 nest.Connect(V, SNc, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8},
              syn_spec={'weight': GAMA * 220.0, "delay":   1.})
-
 
 
 nest.Connect(STATE, spike_recorder_STATE)
@@ -94,7 +96,7 @@ nest.Connect(SNc, spike_recorder_SNc)
 
 # =============================================================
 num_neurons = 50
-noise_weights = 40
+noise_weights = 20
 ex_weights = 10.5
 inh_weights = -2.6
 ex_inh_weights = 2.8
@@ -186,11 +188,13 @@ for episode in range(NUM_EPISODES):
 
         # REWARD
         #     print("state: ", state)
-        new_reward = reward * 100 # max(10 * math.cos(17 * state[2]), 0)
+        new_reward = max(10 * math.cos(17 * state[2]), 0)
+
         # print("New reward : ", new_reward)
         amplitude_I_reward = new_reward
         #     print("Setting amplitude for reward: ", amplitude_I_reward, "     step: ", step)
-        nest.SetStatus(dc_generator_reward, {"amplitude": amplitude_I_reward, "start": time, "stop": time + 20})
+        # nest.SetStatus(dc_generator_reward, {"amplitude": amplitude_I_reward, "start": time, "stop": time + 25})
+        nest.SetStatus(dc_generator_reward, {"amplitude": amplitude_I_reward})
 
         # ENVIRONMENT
         new_transformed_state = transform_state(state)
@@ -222,12 +226,12 @@ for episode in range(NUM_EPISODES):
 
         new_state, reward, done, _ = env.step(action)
 
-        # if done:
-        #     for i in range(0, 2):
-        #         step = step + 1
-        #         nest.SetStatus(dc_generator_reward, {"amplitude": -5.})
-        #         nest.Simulate(STEP + REST_TIME)
-        #         time += STEP + REST_TIME
+        if done:
+            for i in range(0, 5):
+                step = step + 1
+                nest.SetStatus(dc_generator_reward, {"amplitude": 0.})
+                nest.Simulate(STEP + REST_TIME)
+                time += STEP + REST_TIME
 
         #     print("reward:", reward)
 
@@ -250,8 +254,13 @@ for episode in range(NUM_EPISODES):
     # early stopping if we meet solved score goal
     if np.array(recent_scores).mean() >= SOLVED_SCORE:
         break
+    if len(scores) % 10 == 0:
+        print("Save scores")
+        np.savetxt('outputs/scores.txt', scores, delimiter=',')
 
 
+
+print("Save scores")
 np.savetxt('outputs/scores.txt', scores, delimiter=',')
 
 print("====== V === SNc ===")
