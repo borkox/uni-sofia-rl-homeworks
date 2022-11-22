@@ -188,7 +188,7 @@ for episode in range(NUM_EPISODES):
 
         # REWARD
         #     print("state: ", state)
-        new_reward = max(10 * math.cos(17 * state[2]), 0)
+        new_reward = 1 * 10 #max(10 * math.cos(17 * state[2]), 0)
 
         # print("New reward : ", new_reward)
         amplitude_I_reward = new_reward
