@@ -16,7 +16,7 @@ nest.SetKernelStatus({'rng_seed': seed})
 # discount factor for future utilities
 GAMA = 0.8
 # number of episodes to run
-NUM_EPISODES = 500
+NUM_EPISODES = 1000
 # max steps per episode
 MAX_STEPS = 10000
 # score agent needs for environment to be solved
@@ -51,9 +51,10 @@ nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', \
                {'vt': SNc_vt.get('global_id'), \
                 'A_plus': 0.01, 'A_minus': 0.01, \
                 'Wmin': -3000.0, 'Wmax': 3000.0,
-                'tau_c': 3 * (STEP + REST_TIME),
-                'tau_n': 2 * (STEP + REST_TIME),
-                'tau_plus': 20.0})
+                # 'tau_c': 3 * (STEP + REST_TIME),
+                # 'tau_n': 2 * (STEP + REST_TIME),
+                # 'tau_plus': 20.0
+                })
 
 nest.Connect(dc_generator_env, STATE,
              conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.5},
