@@ -17,7 +17,7 @@ nest.SetKernelStatus({"resolution": 0.1})
 # discount factor for future utilities
 GAMA = 0.8
 # number of episodes to run
-NUM_EPISODES = 500
+NUM_EPISODES = 50
 # max steps per episode
 MAX_STEPS = 10000
 # score agent needs for environment to be solved
@@ -222,7 +222,10 @@ for episode in range(NUM_EPISODES):
 
     nest.SetStatus(spd_SC+spd_D1 + spd_D2 +
                    spd_GPe + spd_STN +
-                   spd_SNr + spd_SNc, {"n_events": 0})
+                   spd_SNr + spd_SNc +
+                   spike_recorder_both +
+                   spike_recorder_l +
+                   spike_recorder_r, {"n_events": 0})
 
     # init variables
     state = env.reset()
@@ -314,5 +317,7 @@ np.savetxt('outputs/scores.txt', scores, delimiter=',')
 
 
 
-nest.raster_plot.from_device(spd_SC, hist=True, title="ACTIONS")
+nest.raster_plot.from_device(spike_recorder_both, hist=True, title="ACTIONS")
+plt.show()
+nest.raster_plot.from_device(spd_SC, hist=True, title="spd_SC")
 plt.show()
