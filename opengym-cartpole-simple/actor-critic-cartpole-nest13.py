@@ -17,7 +17,7 @@ nest.SetKernelStatus({"resolution": 0.1})
 # discount factor for future utilities
 GAMA = 0.8
 # number of episodes to run
-NUM_EPISODES = 50
+NUM_EPISODES = 500
 # max steps per episode
 MAX_STEPS = 10000
 # score agent needs for environment to be solved
@@ -35,6 +35,8 @@ nest.set_verbosity("M_WARNING")
 nest.ResetKernel()
 
 def rand_w(w, percent):
+    print('min=',w-abs(w*percent))
+    print('max=',w + abs(w*percent))
     return nest.random.uniform(min=w-abs(w*percent), max=w + abs(w*percent))
 # *****************************
 
@@ -52,7 +54,7 @@ D1 = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
 D2 = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
 
 ## Actor
-GPe = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
+GPe = nest.Create("iaf_psc_alpha", BG_Nl, {'I_e': 380.})
 STN = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
 SNr = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
 SNc = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
@@ -70,21 +72,33 @@ SC = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
 SNc_vt = nest.Create('volume_transmitter')
 nest.Connect(SNc, SNc_vt,'all_to_all')
 
-nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', {'vt': SNc_vt.get('global_id'), 'Wmin':-2000.0, 'Wmax':2000.0})
+nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', {'vt': SNc_vt.get('global_id'),
+                                                   'A_plus': 0.01, 'A_minus': 0.01,
+                                                   'Wmin':-2000.0, 'Wmax':2000.0})
 
-nest.CopyModel('stdp_dopamine_synapse', 'adopsyn', {'vt': SNc_vt.get('global_id'), 'A_plus': -1.0, 'A_minus': -1.5, 'Wmin':-2000.0, 'Wmax':2000.0})
+nest.CopyModel('stdp_dopamine_synapse', 'adopsyn', {'vt': SNc_vt.get('global_id'),
+                                                    'A_plus': -0.01, 'A_minus': -0.015,
+                                                    'Wmin':-2000.0, 'Wmax':2000.0})
 
 ## Model connections
 # nest.Connect(INPUT, INPUT, 'all_to_all', syn_spec={'weight': 100.0, "delay": 1.0})
 
-nest.Connect(INPUT, D1, 'all_to_all', syn_spec={'weight': rand_w(100.0, 0.2), "delay": 1.0, 'synapse_model': 'dopsyn'})
+nest.Connect(INPUT, D1,
+             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
+             syn_spec={'weight': rand_w(100.0, 0.2), "delay": 1.0, 'synapse_model': 'dopsyn'})
 
-nest.Connect(INPUT, D2, 'all_to_all', syn_spec={'weight': rand_w(100.0, 0.2), "delay": 1.0, 'synapse_model': 'adopsyn'})
+nest.Connect(INPUT, D2,
+             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
+             syn_spec={'weight': rand_w(40.0, 0.2), "delay": 1.0, 'synapse_model': 'adopsyn'})
 
-nest.Connect(D1, D1, "all_to_all", syn_spec={'weight': 1.0, "delay": 1.0})
+nest.Connect(D1, D1,
+             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
+             syn_spec={'weight': 1.0, "delay": 1.0})
 nest.Connect(D2, D2, "all_to_all", syn_spec={'weight': 1.0, "delay": 1.0})
 
-nest.Connect(D2, GPe, 'one_to_one', syn_spec={'weight': -100.0, "delay": 1.0}) #-10000.0
+nest.Connect(D2, GPe,
+             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
+             syn_spec={'weight': rand_w(-1.2, 0.2), "delay": 1.0}) #-10000.0
 
 Gama=0.9
 # Value function V(t)
@@ -108,8 +122,12 @@ g_INPUT=0.25
 nest.Connect(INPUT, SC, syn_spec={'weight': rand_w(g_INPUT, 0.2), "delay": 1.0})
 
 w_SC_D=100.0
-nest.Connect(SC, D1, 'all_to_all', syn_spec={'weight': rand_w(w_SC_D, 0.2), "delay": 1.0})
-nest.Connect(SC, D2, 'all_to_all', syn_spec={'weight': rand_w(w_SC_D, 0.2), "delay": 1.0})
+nest.Connect(SC, D1,
+             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
+             syn_spec={'weight': rand_w(w_SC_D, 0.2), "delay": 1.0})
+nest.Connect(SC, D2,
+             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
+             syn_spec={'weight': rand_w(w_SC_D, 0.2), "delay": 1.0})
 
 gSC_INPUT=0.2
 nest.Connect(SC, INPUT, syn_spec={'weight': gSC_INPUT, "delay": 1.0}) ###
@@ -127,6 +145,7 @@ spd_STN= nest.Create("spike_recorder")
 spd_SNr= nest.Create("spike_recorder")
 
 spd_SNc= nest.Create("spike_recorder")
+spd_INPUT= nest.Create("spike_recorder")
 
 nest.Connect(SC,spd_SC)
 
@@ -140,6 +159,7 @@ nest.Connect(STN,spd_STN)
 nest.Connect(SNr,spd_SNr)
 
 nest.Connect(SNc,spd_SNc)
+nest.Connect(INPUT,spd_INPUT)
 
 ### end BG
 # *****************************
@@ -220,7 +240,8 @@ prev_spikes = 0
 # run episodes
 for episode in range(NUM_EPISODES):
 
-    nest.SetStatus(spd_SC+spd_D1 + spd_D2 +
+    nest.SetStatus(spd_INPUT +
+                   spd_SC+spd_D1 + spd_D2 +
                    spd_GPe + spd_STN +
                    spd_SNr + spd_SNc +
                    spike_recorder_both +
@@ -240,7 +261,7 @@ for episode in range(NUM_EPISODES):
 
         # REWARD
         #     print("state: ", state)
-        new_reward = reward * 10 #max(10 * math.cos(17 * state[2]), 0)
+        new_reward = max(10 * math.cos(17 * state[2]), 0)
 
         # print("New reward : ", new_reward)
         amplitude_I_reward = new_reward
@@ -317,7 +338,22 @@ np.savetxt('outputs/scores.txt', scores, delimiter=',')
 
 
 
+nest.raster_plot.from_device(spd_INPUT, hist=True, title="INPUT")
+plt.show()
 nest.raster_plot.from_device(spike_recorder_both, hist=True, title="ACTIONS")
 plt.show()
 nest.raster_plot.from_device(spd_SC, hist=True, title="spd_SC")
 plt.show()
+nest.raster_plot.from_device(spd_D1, hist=True, title="spd_D1")
+plt.show()
+nest.raster_plot.from_device(spd_D2, hist=True, title="spd_D2")
+plt.show()
+nest.raster_plot.from_device(spd_GPe, hist=True, title="spd_GPe")
+plt.show()
+nest.raster_plot.from_device(spd_STN, hist=True, title="spd_STN")
+plt.show()
+nest.raster_plot.from_device(spd_SNr, hist=True, title="spd_SNr")
+plt.show()
+nest.raster_plot.from_device(spd_SNc, hist=True, title="spd_SNc")
+plt.show()
+
