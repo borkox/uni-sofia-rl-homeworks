@@ -10,4 +10,6 @@ conda activate nest-env
 pip install -U scikit-learn
 pip install gym[classic_control]==0.7.0
 pip install pyglet==1.5.27
+pip install swig
+pip install gym[box2d]==0.7.0
 ```
