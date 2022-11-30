@@ -135,6 +135,9 @@ nest.Connect(SNc, SNc_vt,'all_to_all')
 
 nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', {'vt': SNc_vt.get('global_id'),
                                                    'A_plus': 0.01, 'A_minus': 0.01,
+                                                   'tau_c': 1500.0,
+                                                   'tau_n': 500.0,
+                                                   'tau_plus': 20.0,
                                                    'Wmin':-2000.0, 'Wmax':2000.0})
 
 nest.CopyModel('stdp_dopamine_synapse', 'adopsyn', {'vt': SNc_vt.get('global_id'),
@@ -238,7 +241,7 @@ nest.Connect(dc_generator_reward, SNc, conn_spec={'rule': 'pairwise_bernoulli', 
 
 # =============================================================
 def connect_WTA(INP):
-    num_neurons = 50
+    num_neurons = 20
     noise_weights = 20
     ex_weights = 10.5
     inh_weights = -2.6
@@ -284,6 +287,8 @@ def connect_WTA(INP):
 
 spike_recorders_1_4 = connect_WTA(SC)
 spike_recorders_5_8 = connect_WTA(SC)
+spike_recorders_9_12 = connect_WTA(SC)
+spike_recorders_13_16 = connect_WTA(SC)
 
 
 def motor(spike_count_arr):
@@ -320,15 +325,19 @@ prev_spikes = 0
 for episode in range(NUM_EPISODES):
 
     # Clean spike count
+    for x in spike_recorders_1_4:
+        nest.SetStatus(x, {"n_events": 0})
     for x in spike_recorders_5_8:
         nest.SetStatus(x, {"n_events": 0})
-    for x in spike_recorders_1_4:
+    for x in spike_recorders_9_12:
+        nest.SetStatus(x, {"n_events": 0})
+    for x in spike_recorders_13_16:
         nest.SetStatus(x, {"n_events": 0})
 
     nest.SetStatus(spd_INPUT +
-                       spd_SC+spd_D1 + spd_D2 +
-                       spd_GPe + spd_STN +
-                       spd_SNr + spd_SNc, {"n_events": 0})
+                   spd_SC+spd_D1 + spd_D2 +
+                   spd_GPe + spd_STN +
+                   spd_SNr + spd_SNc, {"n_events": 0})
 
     # init variables
     state = env.reset()
@@ -337,6 +346,7 @@ for episode in range(NUM_EPISODES):
     score = 0
     reward = 0
     new_reward = 0
+    mean_reward = 0
     step = 0
     action = np.array([0.5, 0.5, 0.5, 0.5])
     sum_reward = 0
@@ -345,7 +355,7 @@ for episode in range(NUM_EPISODES):
 
         # REWARD
         #     print("state: ", state)
-        new_reward = max(reward,0) * 1000  # max(10 * math.cos(17 * state[2]), 0)
+        new_reward = max(mean_reward+0.2,0) * 100  # max(10 * math.cos(17 * state[2]), 0)
 
         print("New reward : ", new_reward)
         amplitude_I_reward = new_reward
@@ -370,18 +380,20 @@ for episode in range(NUM_EPISODES):
         nest.Simulate(REST_TIME)
 
         spike_count_1_4 = count_spikes(spike_recorders_1_4, time)
-        spike_count_5_8 = count_spikes(spike_recorders_1_4, time)
+        spike_count_5_8 = count_spikes(spike_recorders_5_8, time)
+        spike_count_9_12 = count_spikes(spike_recorders_9_12, time)
+        spike_count_13_16 = count_spikes(spike_recorders_13_16, time)
 
-        action = np.array([
+        action = np.clip(np.array([
             motor(spike_count_1_4),
             motor(spike_count_5_8),
-            -motor(spike_count_1_4),
-            -motor(spike_count_5_8)])
+            motor(spike_count_9_12),
+            motor(spike_count_13_16)]), -1, 1)
 
 
         time += STEP
         time += REST_TIME
-        print("actor spikes:", spike_count_1_4, spike_count_5_8, " at step ", step)
+        print("actor spikes:", spike_count_1_4, spike_count_5_8, spike_count_9_12, spike_count_13_16, " at step ", step)
 
         # action = scaler_actions.transform(np.array([spikes_1,spikes_2,spikes_3,spikes_4]).reshape(1, -1)).reshape(-1)
 
