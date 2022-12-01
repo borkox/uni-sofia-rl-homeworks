@@ -16,7 +16,7 @@ nest.SetKernelStatus({'rng_seed': seed})
 # discount factor for future utilities
 GAMA = 0.8
 # number of episodes to run
-NUM_EPISODES = 1000
+NUM_EPISODES = 3000
 # max steps per episode
 MAX_STEPS = 10000
 # score agent needs for environment to be solved

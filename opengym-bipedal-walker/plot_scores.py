@@ -10,7 +10,7 @@ scores = np.loadtxt('outputs/scores.txt')
 plt.plot(scores)
 plt.ylabel('score')
 plt.xlabel('episodes')
-plt.title('Training score of CartPole Actor-Critic TD(0)')
+plt.title('Training score Bipedal Walker')
 
 reg = LinearRegression().fit(np.arange(len(scores)).reshape(-1, 1), np.array(scores).reshape(-1, 1))
 y_pred = reg.predict(np.arange(len(scores)).reshape(-1, 1))
