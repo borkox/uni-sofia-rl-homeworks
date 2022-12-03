@@ -23,8 +23,8 @@ MAX_STEPS = 10000
 SOLVED_SCORE = 195
 # device to run model on
 time = 0
-STEP = 5
-REST_TIME = 0
+STEP = 15
+REST_TIME = 50
 scaler = scp.MinMaxScaler(feature_range=(0.01, 1), copy=True, clip=True)
 # See https://www.gymlibrary.dev/environments/classic_control/cart_pole/#observation-space
 scaler.fit([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -91,147 +91,90 @@ def transform_state(s):
 
 # ================================================
 
-# ================================================
 nest.set_verbosity("M_WARNING")
 nest.ResetKernel()
 
-def rand_w(w, percent):
-    print('min=',w-abs(w*percent))
-    print('max=',w + abs(w*percent))
-    return nest.random.uniform(min=w-abs(w*percent), max=w + abs(w*percent))
-# *****************************
-
-## BG
-BG_Nl=40
-BG_Nr=40
-
-bg_params={"V_th": -69.992,"V_reset": -80.0,"I_e": 100.0}
-
-## Cortex
-INPUT = nest.Create("iaf_psc_alpha", 2 * BG_Nl, bg_params)
-
-## Striatum
-D1 = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
-D2 = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
-
-## Actor
-GPe = nest.Create("iaf_psc_alpha", BG_Nl, {'I_e': 380.})
-STN = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
-SNr = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
-SNc = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
-
-# reinforcement signal from object
-nest.SetStatus(SNc, {'I_e': 200.0})
-
-## State from object
-nest.SetStatus(INPUT, {'I_e': 150.0})
-
-## control actions
-SC = nest.Create("iaf_psc_alpha", BG_Nl, bg_params)
-
-## dopamine synapses
 SNc_vt = nest.Create('volume_transmitter')
-nest.Connect(SNc, SNc_vt,'all_to_all')
 
-nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', {'vt': SNc_vt.get('global_id'),
-                                                   'A_plus': 0.01, 'A_minus': 0.01,
-                                                   # 'tau_c': 1500.0,
-                                                   # 'tau_n': 500.0,
-                                                   # 'tau_plus': 20.0,
-                                                   'Wmin':-2000.0, 'Wmax':2000.0})
+STATE = nest.Create("iaf_psc_alpha", 6 * 24, {"I_e": 130.0})
+V = nest.Create("iaf_psc_alpha", 40, {"I_e": 30.0})
+POLICY = nest.Create("iaf_psc_alpha", 300, {"I_e": 30.0})
+# PD = nest.Create("iaf_psc_alpha", 15, {"I_e": 30.0})
+SNc = nest.Create("iaf_psc_alpha", 8, {"I_e": 10.0})
 
-nest.CopyModel('stdp_dopamine_synapse', 'adopsyn', {'vt': SNc_vt.get('global_id'),
-                                                    'A_plus': -0.01, 'A_minus': -0.015,
-                                                    'Wmin':-2000.0, 'Wmax':2000.0})
+dc_generator_reward = nest.Create('dc_generator', 8, {"amplitude": 0.})
+dc_generator_env = nest.Create('dc_generator', 48, {"amplitude": 0.})
+spike_recorder_STATE = nest.Create('spike_recorder')
+spike_recorder_V = nest.Create('spike_recorder')
+spike_recorder_POLICY = nest.Create('spike_recorder')
+spike_recorder_SNc = nest.Create('spike_recorder')
+nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', \
+               {'vt': SNc_vt.get('global_id'), \
+                'A_plus': 0.01, 'A_minus': 0.01, \
+                'Wmin': -3000.0, 'Wmax': 3000.0,
+                # 'tau_c': 5 * (STEP + REST_TIME),
+                # 'tau_n': 3 * (STEP + REST_TIME),
+                'tau_plus': 20.0
+                })
 
-## Model connections
-# nest.Connect(INPUT, INPUT, 'all_to_all', syn_spec={'weight': 100.0, "delay": 1.0})
+nest.Connect(dc_generator_env, STATE,
+             conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.2},
+             syn_spec={'weight': 20})
 
-nest.Connect(INPUT, D1,
+nest.Connect(STATE, STATE,
+             conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.1},
+             syn_spec={'weight': 1})
+
+nest.Connect(STATE[3*24:5*24], V,
+             conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.5},
+             syn_spec={
+                 "weight": nest.random.uniform(min=-20., max=45.),
+                 'synapse_model': 'dopsyn'})
+nest.Connect(STATE[5*24:], V,
+             conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.5},
+             syn_spec={
+                 "weight": nest.random.uniform(min=-20., max=45.),
+                 'synapse_model': 'dopsyn', "delay": STEP + REST_TIME + 1.0})
+
+nest.Connect(STATE[0:2*24], POLICY,
              conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
-             syn_spec={'weight': rand_w(100.0, 0.2), "delay": 1.0, 'synapse_model': 'dopsyn'})
-
-nest.Connect(INPUT, D2,
+             syn_spec={
+                 "weight": nest.random.uniform(min=-20., max=45.),
+                 'synapse_model': 'dopsyn'})
+nest.Connect(STATE[2*24:3*24], POLICY,
              conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
-             syn_spec={'weight': rand_w(40.0, 0.2), "delay": 1.0, 'synapse_model': 'adopsyn'})
+             syn_spec={
+                 "weight": nest.random.uniform(min=-20., max=45.),
+                 'synapse_model': 'dopsyn', "delay": STEP + REST_TIME + 1.0})
 
-nest.Connect(D1, D1,
-             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
-             syn_spec={'weight': 1.0, "delay": 1.0})
-nest.Connect(D2, D2, "all_to_all", syn_spec={'weight': 1.0, "delay": 1.0})
+# nest.Connect(POLICY, STATE,
+#              conn_spec={'rule': 'fixed_indegree', 'indegree': 25},
+#              syn_spec={
+#                  "weight": nest.random.uniform(min=10., max=25.)})
 
-nest.Connect(D2, GPe,
-             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
-             syn_spec={'weight': rand_w(-1.2, 0.2), "delay": 1.0}) #-10000.0
+nest.Connect(dc_generator_reward, SNc, 'one_to_one',
+             syn_spec={"weight": 50., "delay": 1.})
 
-Gama=0.9
+# Volume transmitter
+nest.Connect(SNc, SNc_vt, 'all_to_all')
+
 # Value function V(t)
-nest.Connect(D1, SNc, 'one_to_one', syn_spec={'weight': rand_w(-1000.0, 0.2), "delay": 1.0, 'synapse_model': 'dopsyn'})
+nest.Connect(V, SNc, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8},
+             syn_spec={'weight': - 220.0, "delay": STEP + REST_TIME + 1.0})
 # Value function V(t+1)
-nest.Connect(D1, SNc, 'one_to_one', syn_spec={'weight': rand_w(Gama*1000.0, 0.2), "delay": 2.0, 'synapse_model': 'dopsyn'})
+nest.Connect(V, SNc, conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.8},
+             syn_spec={'weight': GAMA * 220.0, "delay": 1.})
 
-# wrand=-100.0*random.random()
-nest.Connect(D1, SNr, 'one_to_one',syn_spec={'weight': rand_w(-100.0, 0.2), "delay": 1.0, 'synapse_model': 'dopsyn'})
-
-nest.Connect(GPe, STN, 'one_to_one', syn_spec={'weight': -100.0, "delay": 1.0}) #100.0!
-
-nest.Connect(STN, GPe, 'one_to_one', syn_spec={'weight': 100.0, "delay": 1.0}) #100.0!
-
-nest.Connect(STN, SNr, 'all_to_all', syn_spec={'weight': rand_w(100.0, 0.2), "delay": 1.0, 'synapse_model': 'dopsyn'})
-
-g_SNr_SC=1.0
-nest.Connect(SNr, SC, syn_spec={'weight': rand_w(g_SNr_SC, 0.2), "delay": 1.0})
-
-g_INPUT=0.25
-nest.Connect(INPUT, SC, syn_spec={'weight': rand_w(g_INPUT, 0.2), "delay": 1.0})
-
-w_SC_D=100.0
-nest.Connect(SC, D1,
-             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
-             syn_spec={'weight': rand_w(w_SC_D, 0.2), "delay": 1.0})
-nest.Connect(SC, D2,
-             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
-             syn_spec={'weight': rand_w(w_SC_D, 0.2), "delay": 1.0})
-
-gSC_INPUT=0.2
-nest.Connect(SC, INPUT, syn_spec={'weight': gSC_INPUT, "delay": 1.0}) ###
-
-spd_SC= nest.Create("spike_recorder")
-
-spd_D1= nest.Create("spike_recorder")
-
-spd_D2= nest.Create("spike_recorder")
-
-spd_GPe= nest.Create("spike_recorder")
-
-spd_STN= nest.Create("spike_recorder")
-
-spd_SNr= nest.Create("spike_recorder")
-
-spd_SNc= nest.Create("spike_recorder")
-spd_INPUT= nest.Create("spike_recorder")
-
-nest.Connect(SC,spd_SC)
-
-nest.Connect(D1,spd_D1)
-nest.Connect(D2,spd_D2)
-
-nest.Connect(GPe,spd_GPe)
-
-nest.Connect(STN,spd_STN)
-
-nest.Connect(SNr,spd_SNr)
-
-nest.Connect(SNc,spd_SNc)
-nest.Connect(INPUT,spd_INPUT)
-
-### end BG
+nest.Connect(STATE, spike_recorder_STATE)
+nest.Connect(V, spike_recorder_V)
+nest.Connect(POLICY, spike_recorder_POLICY)
+nest.Connect(SNc, spike_recorder_SNc)
 # *****************************
 
 dc_generator_reward = nest.Create('dc_generator', 8, {"amplitude": 0.})
 dc_generator_env = nest.Create('dc_generator', 48, {"amplitude": 0.})
 
-nest.Connect(dc_generator_env, INPUT,
+nest.Connect(dc_generator_env, STATE,
              conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.5},
              syn_spec={'weight': 20})
 
@@ -291,10 +234,10 @@ def connect_WTA(INP):
     return spike_recorder_1, spike_recorder_2, spike_recorder_3, spike_recorder_4, spike_recorder_5
 
 
-spike_recorders_group_1 = connect_WTA(SC)
-spike_recorders_group_2 = connect_WTA(SC)
-spike_recorders_group_3 = connect_WTA(SC)
-spike_recorders_group_4 = connect_WTA(SC)
+spike_recorders_group_1 = connect_WTA(POLICY)
+spike_recorders_group_2 = connect_WTA(POLICY)
+spike_recorders_group_3 = connect_WTA(POLICY)
+spike_recorders_group_4 = connect_WTA(POLICY)
 
 
 def motor_action(spike_count_group_1, spike_count_group_2, spike_count_group_3, spike_count_group_4, prev_action):
@@ -347,10 +290,10 @@ for episode in range(NUM_EPISODES):
     for x in spike_recorders_group_4:
         nest.SetStatus(x, {"n_events": 0})
 
-    nest.SetStatus(spd_INPUT +
-                   spd_SC+spd_D1 + spd_D2 +
-                   spd_GPe + spd_STN +
-                   spd_SNr + spd_SNc, {"n_events": 0})
+    nest.SetStatus(spike_recorder_STATE, {"n_events": 0})
+    nest.SetStatus(spike_recorder_V, {"n_events": 0})
+    nest.SetStatus(spike_recorder_POLICY, {"n_events": 0})
+    nest.SetStatus(spike_recorder_SNc, {"n_events": 0})
 
     # init variables
     state = env.reset()
@@ -459,21 +402,19 @@ for episode in range(NUM_EPISODES):
 print("Save scores")
 np.savetxt('outputs/scores.txt', scores, delimiter=',')
 
-nest.raster_plot.from_device(spd_INPUT, hist=True, title="INPUT")
+
+print("====== V === SNc ===")
+print(nest.GetConnections(V, SNc))
+print("====== STATE === V ===")
+print(nest.GetConnections(STATE, V))
+print("====== STATE === POLICY ===")
+print(nest.GetConnections(STATE, POLICY))
+
+nest.raster_plot.from_device(spike_recorder_STATE, hist=True, title="STATE")
 plt.show()
-# nest.raster_plot.from_device(spike_recorder_both, hist=True, title="ACTIONS")
-# plt.show()
-nest.raster_plot.from_device(spd_SC, hist=True, title="spd_SC")
+nest.raster_plot.from_device(spike_recorder_V, hist=True, title="V")
 plt.show()
-nest.raster_plot.from_device(spd_D1, hist=True, title="spd_D1")
+nest.raster_plot.from_device(spike_recorder_POLICY, hist=True, title="POLICY")
 plt.show()
-nest.raster_plot.from_device(spd_D2, hist=True, title="spd_D2")
-plt.show()
-nest.raster_plot.from_device(spd_GPe, hist=True, title="spd_GPe")
-plt.show()
-nest.raster_plot.from_device(spd_STN, hist=True, title="spd_STN")
-plt.show()
-nest.raster_plot.from_device(spd_SNr, hist=True, title="spd_SNr")
-plt.show()
-nest.raster_plot.from_device(spd_SNc, hist=True, title="spd_SNc")
+nest.raster_plot.from_device(spike_recorder_SNc, hist=True, title="SNc")
 plt.show()
