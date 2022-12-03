@@ -14,17 +14,17 @@ seed = np.random.randint(0, 1000000)
 nest.SetKernelStatus({'rng_seed': seed})
 
 # discount factor for future utilities
-GAMA = 0.8
+GAMA = 0.95
 # number of episodes to run
-NUM_EPISODES = 3000
+NUM_EPISODES = 5
 # max steps per episode
 MAX_STEPS = 10000
 # score agent needs for environment to be solved
 SOLVED_SCORE = 195
 # device to run model on
 time = 0
-STEP = 5
-REST_TIME = 0
+STEP = 15
+REST_TIME = 20
 scaler = scp.MinMaxScaler(feature_range=(0.01, 1), copy=True, clip=True)
 # See https://www.gymlibrary.dev/environments/classic_control/cart_pole/#observation-space
 scaler.fit([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -135,9 +135,9 @@ nest.Connect(SNc, SNc_vt,'all_to_all')
 
 nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', {'vt': SNc_vt.get('global_id'),
                                                    'A_plus': 0.01, 'A_minus': 0.01,
-                                                   # 'tau_c': 1500.0,
-                                                   # 'tau_n': 500.0,
-                                                   # 'tau_plus': 20.0,
+                                                   'tau_c': 1500.0,
+                                                   'tau_n': 500.0,
+                                                   'tau_plus': 20.0,
                                                    'Wmin':-2000.0, 'Wmax':2000.0})
 
 nest.CopyModel('stdp_dopamine_synapse', 'adopsyn', {'vt': SNc_vt.get('global_id'),
@@ -369,7 +369,7 @@ for episode in range(NUM_EPISODES):
 
         # REWARD
         #     print("state: ", state)
-        new_reward = max(recent_reward_mean+0.2,0) * 100  # max(10 * math.cos(17 * state[2]), 0)
+        new_reward = recent_reward_mean * 100  # max(10 * math.cos(17 * state[2]), 0)
 
         print("New reward : ", new_reward)
         amplitude_I_reward = new_reward

@@ -14,7 +14,7 @@ seed = np.random.randint(0, 1000000)
 nest.SetKernelStatus({'rng_seed': seed})
 
 # discount factor for future utilities
-GAMA = 0.8
+GAMA = 0.95
 # number of episodes to run
 NUM_EPISODES = 3000
 # max steps per episode
@@ -24,7 +24,7 @@ SOLVED_SCORE = 195
 # device to run model on
 time = 0
 STEP = 15
-REST_TIME = 50
+REST_TIME = 10
 scaler = scp.MinMaxScaler(feature_range=(0.01, 1), copy=True, clip=True)
 # See https://www.gymlibrary.dev/environments/classic_control/cart_pole/#observation-space
 scaler.fit([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -114,7 +114,7 @@ nest.CopyModel('stdp_dopamine_synapse', 'dopsyn', \
                 'Wmin': -3000.0, 'Wmax': 3000.0,
                 # 'tau_c': 5 * (STEP + REST_TIME),
                 # 'tau_n': 3 * (STEP + REST_TIME),
-                'tau_plus': 20.0
+                # 'tau_plus': 20.0
                 })
 
 nest.Connect(dc_generator_env, STATE,
@@ -130,22 +130,22 @@ nest.Connect(STATE[3*24:5*24], V,
              syn_spec={
                  "weight": nest.random.uniform(min=-20., max=45.),
                  'synapse_model': 'dopsyn'})
-nest.Connect(STATE[5*24:], V,
-             conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.5},
-             syn_spec={
-                 "weight": nest.random.uniform(min=-20., max=45.),
-                 'synapse_model': 'dopsyn', "delay": STEP + REST_TIME + 1.0})
+# nest.Connect(STATE[5*24:], V,
+#              conn_spec={'rule': 'pairwise_bernoulli', 'p': 0.5},
+#              syn_spec={
+#                  "weight": nest.random.uniform(min=-20., max=45.),
+#                  'synapse_model': 'dopsyn', "delay": STEP + REST_TIME + 1.0})
 
-nest.Connect(STATE[0:2*24], POLICY,
+nest.Connect(STATE[0:3*24], POLICY,
              conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
              syn_spec={
                  "weight": nest.random.uniform(min=-20., max=45.),
                  'synapse_model': 'dopsyn'})
-nest.Connect(STATE[2*24:3*24], POLICY,
-             conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
-             syn_spec={
-                 "weight": nest.random.uniform(min=-20., max=45.),
-                 'synapse_model': 'dopsyn', "delay": STEP + REST_TIME + 1.0})
+# nest.Connect(STATE[2*24:3*24], POLICY,
+#              conn_spec={'rule': 'fixed_indegree', 'indegree': 15},
+#              syn_spec={
+#                  "weight": nest.random.uniform(min=-20., max=45.),
+#                  'synapse_model': 'dopsyn', "delay": STEP + REST_TIME + 1.0})
 
 # nest.Connect(POLICY, STATE,
 #              conn_spec={'rule': 'fixed_indegree', 'indegree': 25},
@@ -242,7 +242,7 @@ spike_recorders_group_4 = connect_WTA(POLICY)
 
 def motor_action(spike_count_group_1, spike_count_group_2, spike_count_group_3, spike_count_group_4, prev_action):
     count = len(spike_count_group_1)
-    lin_space_interval = np.linspace(-0.5, 0.5, count)
+    lin_space_interval = np.linspace(-0.8, 0.8, count)
     action = np.clip(np.array([
         lin_space_interval[np.argmax(spike_count_group_1)],
         lin_space_interval[np.argmax(spike_count_group_2)],
@@ -312,7 +312,7 @@ for episode in range(NUM_EPISODES):
 
         # REWARD
         #     print("state: ", state)
-        new_reward = max(recent_reward_mean+0.2,0) * 100  # max(10 * math.cos(17 * state[2]), 0)
+        new_reward = max(recent_reward_mean,0) * 100  # max(10 * math.cos(17 * state[2]), 0)
 
         print("New reward : ", new_reward)
         amplitude_I_reward = new_reward
