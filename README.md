@@ -13,3 +13,8 @@ pip install pyglet==1.5.27
 pip install swig
 pip install gym[box2d]==0.7.0
 ```
+
+
+```
+pip3 install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu116
+```

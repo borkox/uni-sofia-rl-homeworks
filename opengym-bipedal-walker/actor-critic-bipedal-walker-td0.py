@@ -93,7 +93,7 @@ class StateValueNetwork(nn.Module):
 
 
 # Make environment
-env = gym.make('BipedalWalker-v3')
+env = gym.make('BipedalWalker-v2')
 
 # Init network
 print(f"Observation space: {env.observation_space.shape[0]}")
