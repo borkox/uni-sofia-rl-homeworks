@@ -18,7 +18,7 @@ MAX_STEPS = 10000
 SOLVED_SCORE = 195
 # device to run model on
 time = 0
-STEP = 100
+STEP = 200
 REST_TIME = 50
 scaler = scp.MinMaxScaler(feature_range=(0.01, 0.99), copy=True, clip=True)
 # See https://www.gymlibrary.dev/environments/classic_control/cart_pole/#observation-space
