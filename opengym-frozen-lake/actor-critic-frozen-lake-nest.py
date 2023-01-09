@@ -3,16 +3,17 @@ from collections import deque
 import nest.voltage_trace
 import matplotlib.pyplot as plt
 import numpy as np
+from gym.envs.toy_text import FrozenLakeEnv
 
 # number of episodes to run
-NUM_EPISODES = 1500
+NUM_EPISODES = 1000
 # max steps per episode
 MAX_STEPS = 10000
 # score agent needs for environment to be solved
 SOLVED_SCORE = 0.9
 # device to run model on
 time = 0
-STEP = 200
+STEP = 100
 REST_TIME = 50
 
 # ================================================
@@ -107,14 +108,14 @@ tau_post = 20.
 
 # Connect states to actions
 nest.CopyModel('stdp_dopamine_synapse', 'dopa_synapse', {
-    'vt': vol_trans.get('global_id'), 'A_plus': 0.040, 'A_minus': 0.050, "tau_plus": tau_post,
+    'vt': vol_trans.get('global_id'), 'A_plus': 4, 'A_minus': 5, "tau_plus": tau_post,
     'Wmin': -10., 'Wmax': 10., 'b': 1., 'tau_n': tau_n, 'tau_c': tau_c})
 
 nest.Connect(all_states, all_actions, 'all_to_all', {'synapse_model': 'dopa_synapse', 'weight': 0.0})
 
 # TODO experimental: project from state to DA via critic 
 nest.CopyModel('stdp_dopamine_synapse', 'dopa_synapse_critic', {
-    'vt': vol_trans.get('global_id'), 'A_plus': 0.040, 'A_minus': 0.050, "tau_plus": tau_post,
+    'vt': vol_trans.get('global_id'), 'A_plus': 4, 'A_minus': 5, "tau_plus": tau_post,
     'Wmin': -10., 'Wmax': 10., 'b': 1., 'tau_n': tau_n, 'tau_c': tau_c})
 
 critic = nest.Create('iaf_psc_alpha', 50)
@@ -145,7 +146,8 @@ nest.Connect(noise, all_states, 'all_to_all', {'weight': 1.})
 nest.Connect(noise, DA_neurons, 'all_to_all', {'weight': 1.0367})
 
 # Make environment
-env = gym.make('FrozenLake-v0')
+# env = gym.make('FrozenLake-v0')
+env = FrozenLakeEnv(is_slippery=False)
 
 # Init network
 print(f"Observation space: {env.observation_space}")
@@ -172,7 +174,6 @@ for episode in range(NUM_EPISODES):
     done = False
     score = 0
     reward = 0
-    new_reward = 0
     step = 0
     # run episode, update online
     for _ in range(MAX_STEPS):
@@ -207,7 +208,7 @@ for episode in range(NUM_EPISODES):
 
         # stimulate new state
         for si in range(len(states)):
-            nest.SetStatus(nest.GetConnections(stimulus, states[si][0]), {'weight': 0.})
+            nest.SetStatus(nest.GetConnections(stimulus, states[state_x][state_y]), {'weight': 0.})
 
         # apply reward
         nest.SetStatus(nest.GetConnections(reward_stimulus, DA_neurons), {'weight': float(reward) * WEIGHT_SCALING})
