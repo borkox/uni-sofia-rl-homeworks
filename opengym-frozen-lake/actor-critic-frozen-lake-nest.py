@@ -5,33 +5,97 @@ import matplotlib.pyplot as plt
 import numpy as np
 from gym.envs.toy_text import FrozenLakeEnv
 
+
 # number of episodes to run
-NUM_EPISODES = 1000
+NUM_EPISODES = 150
 # max steps per episode
-MAX_STEPS = 10000
+MAX_STEPS = 100
+# Saves scores to file evey SAVE_SCORES_STEPS steps
+SAVE_SCORES_STEPS = 5
 # score agent needs for environment to be solved
-SOLVED_SCORE = 0.9
-# device to run model on
-time = 0
+SOLVED_MEAN_SCORE = 0.9
+SOLVED_MIN_EPISODES = 3
+# current time while it runs
+current_time = 0
+# STEP is milliseconds to run active simulation
 STEP = 100
-REST_TIME = 50
+# REST_TIME is milliseconds to run rest for WTA and perform dopamine STDP
+REST_TIME = 40
+LEARN_TIME = 40
+# Noise constants
+NOISE_DA_NEURONS_WEIGHT = 0.01
+NOISE_ALL_STATES_WEIGHT = 0.01
+NOISE_RATE = 65000.
+CRITIC_NOISE_RATE = 65500.
+REWARD_STIMULUS_RATE = 65000.
+STIMULUS_RATE = 65000.
+WTA_NOISE_RATE = 2500.
 
 # ================================================
 nest.set_verbosity("M_WARNING")
 nest.ResetKernel()
 
-# ================================================
-WORLD_ROWS = 4
-WORLD_COLS = 4
+# ================= Environment ==================
+WORLD_ROWS = 3
+WORLD_COLS = 3
 world_dim = {'x': WORLD_COLS, 'y': WORLD_ROWS}
 num_actions = 4
 possible_actions = [0, 1, 2, 3]
 possible_actions_str = ["LEFT", "DOWN", "RIGHT", "UP"]
+# Make environment
+# env = gym.make('FrozenLake-v0')
+env = FrozenLakeEnv(desc=["SFF",
+                          "FFH",
+                          "FFG"],is_slippery=False)
+# ================================================
+def plot_values(fig, ax, position):
+    plt.cla()
 
-# NUM_ITERATIONS = 300
+    values_plot = []
+
+    for i in range(world_dim['y']):
+        values_plot.append([])
+        for j in range(world_dim['x']):
+            values_plot[i].append(np.mean([np.mean(nest.GetStatus(nest.GetConnections(states[j][i], actions[a]), 'weight')) for a in range(len(actions))]))
+            if len(actions) == 4:
+                q_left = np.mean(nest.GetStatus(nest.GetConnections(states[j][i], actions[0]), 'weight'))
+                q_down = np.mean(nest.GetStatus(nest.GetConnections(states[j][i], actions[1]), 'weight'))
+                q_right = np.mean(nest.GetStatus(nest.GetConnections(states[j][i], actions[2]), 'weight'))
+                q_up = np.mean(nest.GetStatus(nest.GetConnections(states[j][i], actions[3]), 'weight'))
+                ax.arrow(j, i, (q_right-q_left)/10., (q_down-q_up)/10., head_width=0.05, head_length=0.1, fc='k', ec='k')
+
+
+    values_plot = np.array(values_plot)
+    print(values_plot)
+
+    plt.imshow(values_plot, interpolation='none', vmax=1 * WEIGHT_SCALING, vmin=-1 * WEIGHT_SCALING)
+
+    xlabels = np.arange(0, len(states))
+    ylabels = np.arange(0, len(states[0]))
+
+    # Set the major ticks at the centers and minor tick at the edges
+    xlocs = np.arange(len(xlabels))
+    ylocs = np.arange(len(ylabels))
+    ax.xaxis.set_ticks(xlocs + 0.5, minor=True)
+    ax.xaxis.set(ticks=xlocs, ticklabels=xlabels)
+    ax.yaxis.set_ticks(ylocs + 0.5, minor=True)
+    ax.yaxis.set(ticks=ylocs, ticklabels=ylabels)
+
+    # Turn on the grid for the minor ticks
+    ax.grid(True, which='minor', linestyle='-', linewidth=2)
+
+    for txt in ax.texts:
+        txt.set_visible(False)
+
+    ax.annotate(".", ((position['x'] + 0.5)/len(states), (1-(position['y'] + 0.5)/len(states[0]))), size=160, textcoords='axes fraction', color='white')
+    #plt.draw()
+# ================================================
+
+
 NUM_STATE_NEURONS = 20
 NUM_WTA_NEURONS = 50
-WEIGHT_SCALING = 100 / NUM_STATE_NEURONS
+# WEIGHT_SCALING = 100 / NUM_STATE_NEURONS
+WEIGHT_SCALING = 100 * 20 / NUM_STATE_NEURONS
 
 # nest.ResetKernel()
 # nest.set_verbosity("M_DEBUG")
@@ -50,13 +114,13 @@ states = []
 all_states = None
 for i in range(world_dim['x']):
     states.append([])
-    state_group = nest.Create('iaf_psc_alpha', NUM_STATE_NEURONS)
     for j in range(world_dim['y']):
+        state_group = nest.Create('iaf_psc_alpha', NUM_STATE_NEURONS)
         states[i].append(state_group)
-    if all_states is None:
-        all_states = state_group
-    else:
-        all_states = all_states + state_group
+        if all_states is None:
+            all_states = state_group
+        else:
+            all_states = all_states + state_group
 
 # Create actions
 actions = []
@@ -83,12 +147,12 @@ for i in range(len(actions)):
 
 nest.Connect(wta_inh_neurons, all_actions, 'all_to_all', {'weight': wta_inh_weights})
 
-wta_noise = nest.Create('poisson_generator', 10, {'rate': 3000.})
+wta_noise = nest.Create('poisson_generator', 10, {'rate': WTA_NOISE_RATE})
 nest.Connect(wta_noise, all_actions, 'all_to_all', {'weight': wta_noise_weights})
 nest.Connect(wta_noise, wta_inh_neurons, 'all_to_all', {'weight': wta_noise_weights * 0.9})
 
 # Create stimulus
-stimulus = nest.Create('poisson_generator', 1, {'rate': 5000.})
+stimulus = nest.Create('poisson_generator', 1, {'rate': STIMULUS_RATE})
 nest.Connect(stimulus, all_states, 'all_to_all', {'weight': 0.})
 
 # Here, we are implementing the dopaminergic nueron pool, volume transmitter and dopamin-modulated synapse between states and actions
@@ -99,7 +163,7 @@ vol_trans = nest.Create('volume_transmitter', 1, {'deliver_interval': 10})
 nest.Connect(DA_neurons, vol_trans, 'all_to_all')
 
 # Create reward stimulus
-reward_stimulus = nest.Create('poisson_generator', 1, {'rate': 5000.})
+reward_stimulus = nest.Create('poisson_generator', 1, {'rate': REWARD_STIMULUS_RATE})
 nest.Connect(reward_stimulus, DA_neurons, 'all_to_all', {'weight': 0.})
 
 tau_c = 50.0
@@ -108,22 +172,22 @@ tau_post = 20.
 
 # Connect states to actions
 nest.CopyModel('stdp_dopamine_synapse', 'dopa_synapse', {
-    'vt': vol_trans.get('global_id'), 'A_plus': 4, 'A_minus': 5, "tau_plus": tau_post,
-    'Wmin': -10., 'Wmax': 10., 'b': 1., 'tau_n': tau_n, 'tau_c': tau_c})
+    'vt': vol_trans.get('global_id'), 'A_plus': 4, 'A_minus': 0.5, "tau_plus": tau_post,
+    'Wmin': -10., 'Wmax': 20., 'b': 0., 'tau_n': tau_n, 'tau_c': tau_c})
 
 nest.Connect(all_states, all_actions, 'all_to_all', {'synapse_model': 'dopa_synapse', 'weight': 0.0})
 
 # TODO experimental: project from state to DA via critic 
 nest.CopyModel('stdp_dopamine_synapse', 'dopa_synapse_critic', {
-    'vt': vol_trans.get('global_id'), 'A_plus': 4, 'A_minus': 5, "tau_plus": tau_post,
-    'Wmin': -10., 'Wmax': 10., 'b': 1., 'tau_n': tau_n, 'tau_c': tau_c})
+    'vt': vol_trans.get('global_id'), 'A_plus': 4, 'A_minus': 0.5, "tau_plus": tau_post,
+    'Wmin': -10., 'Wmax': 20., 'b': 0., 'tau_n': tau_n, 'tau_c': tau_c})
 
 critic = nest.Create('iaf_psc_alpha', 50)
 nest.Connect(all_states, critic, 'all_to_all', {'synapse_model': 'dopa_synapse_critic', 'weight': 0.0})
 nest.Connect(critic, DA_neurons, 'all_to_all', {'weight': -5., 'delay': 50.})
 nest.Connect(critic, DA_neurons, 'all_to_all', {'weight': 5., 'delay': 1.})
 
-critic_noise = nest.Create('poisson_generator', 1, {'rate': 65500.})
+critic_noise = nest.Create('poisson_generator', 1, {'rate': CRITIC_NOISE_RATE})
 nest.Connect(critic_noise, critic)
 
 # Create spike detector
@@ -141,13 +205,10 @@ sd_critic = nest.Create('spike_recorder', 1)
 nest.Connect(critic, sd_critic, 'all_to_all')
 
 # Create noise
-noise = nest.Create('poisson_generator', 1, {'rate': 65000.})
-nest.Connect(noise, all_states, 'all_to_all', {'weight': 1.})
-nest.Connect(noise, DA_neurons, 'all_to_all', {'weight': 1.0367})
+noise = nest.Create('poisson_generator', 1, {'rate': NOISE_RATE})
+nest.Connect(noise, all_states, 'all_to_all', {'weight': NOISE_ALL_STATES_WEIGHT})
+nest.Connect(noise, DA_neurons, 'all_to_all', {'weight': NOISE_DA_NEURONS_WEIGHT})
 
-# Make environment
-# env = gym.make('FrozenLake-v0')
-env = FrozenLakeEnv(is_slippery=False)
 
 # Init network
 print(f"Observation space: {env.observation_space}")
@@ -155,6 +216,9 @@ print(f"Action space: {env.action_space.n}")
 
 # track scores
 scores = []
+# interactive plotting
+fig, ax = plt.subplots()
+# plt.ion()
 
 # track recent scores
 recent_scores = deque(maxlen=100)
@@ -178,14 +242,17 @@ for episode in range(NUM_EPISODES):
     # run episode, update online
     for _ in range(MAX_STEPS):
 
-        nest.SetStatus(wta_noise, {'rate': 3000.})
-
         # ENVIRONMENT
         state_x = int(state % WORLD_COLS)
         state_y = int(state / WORLD_COLS)
+
+
+        nest.SetStatus(nest.GetConnections(stimulus, states[state_x][state_y]), {'weight': 1.})
+        nest.SetStatus(wta_noise, {'rate': 3000.})
+
         print("State position: ", state_x, ", ", state_y)
-        for si in range(len(states)):
-            nest.SetStatus(nest.GetConnections(stimulus, states[state_x][state_y]), {'weight': 1.})
+        # for si in range(len(states)):
+        nest.SetStatus(nest.GetConnections(stimulus, states[state_x][state_y]), {'weight': 1.})
 
         env.render()
         nest.Simulate(STEP)
@@ -194,12 +261,12 @@ for episode in range(NUM_EPISODES):
         chosen_action = -1
         for i in range(len(sd_actions)):
             rate = len([e for e in nest.GetStatus(sd_actions[i], keys='events')[0]['times'] if
-                        e > time])  # calc the \"firerate\" of each actor population
+                        e > current_time])  # calc the \"firerate\" of each actor population
             if rate > max_rate:
                 max_rate = rate  # the population with the hightes rate wins
                 chosen_action = i
 
-        time += STEP
+        current_time += STEP
         print("chose action:", possible_actions[chosen_action], " ", possible_actions_str[chosen_action], " at step ",
               step)
 
@@ -207,18 +274,28 @@ for episode in range(NUM_EPISODES):
         new_state, reward, done, _ = env.step(action)
 
         # stimulate new state
-        for si in range(len(states)):
-            nest.SetStatus(nest.GetConnections(stimulus, states[state_x][state_y]), {'weight': 0.})
+        nest.SetStatus(nest.GetConnections(stimulus, states[state_x][state_y]), {'weight': 0.})
 
         # apply reward
+        print("Scaled reward:", float(reward) * WEIGHT_SCALING)
         nest.SetStatus(nest.GetConnections(reward_stimulus, DA_neurons), {'weight': float(reward) * WEIGHT_SCALING})
-        nest.SetStatus(wta_noise, {'rate': 0.})
 
-        # refactory time
-        nest.Simulate(REST_TIME)
-        time += REST_TIME
+        # learn time
+        if reward > 0:
+            print("Learn time")
+            nest.Simulate(LEARN_TIME)
+            current_time += LEARN_TIME
 
         nest.SetStatus(nest.GetConnections(reward_stimulus, DA_neurons), {'weight': 0.0})
+
+        nest.SetStatus(wta_noise, {'rate': 0.})
+        # refactory time
+        nest.Simulate(REST_TIME)
+        current_time += REST_TIME
+
+        # plotting
+        plot_values(fig, ax, {'x':state_x, 'y': state_y})
+
 
         # if done:
         #     for i in range(0, 1):
@@ -246,15 +323,16 @@ for episode in range(NUM_EPISODES):
     recent_scores.append(score)
 
     # early stopping if we meet solved score goal
-    if np.array(recent_scores).mean() >= SOLVED_SCORE:
+    if len(recent_scores) > SOLVED_MIN_EPISODES and np.array(recent_scores).mean() >= SOLVED_MEAN_SCORE:
         print("SOLVED")
         break
     else:
         print('Mean score: ', np.array(recent_scores).mean())
-    if len(scores) % 10 == 0:
+    if len(scores) % SAVE_SCORES_STEPS == 0:
         print("Save scores")
         np.savetxt('outputs/scores.txt', scores, delimiter=',')
-
+    # if reward > 0:
+    #     break
 np.savetxt('outputs/scores.txt', scores, delimiter=',')
 
 print("====== all_states === all_actions ===")
