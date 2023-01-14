@@ -7,7 +7,7 @@ from gym.envs.toy_text import FrozenLakeEnv
 
 
 # number of episodes to run
-NUM_EPISODES = 150
+NUM_EPISODES = 60
 # max steps per episode
 MAX_STEPS = 100
 # Saves scores to file evey SAVE_SCORES_STEPS steps
@@ -18,10 +18,10 @@ SOLVED_MIN_EPISODES = 3
 # current time while it runs
 current_time = 0
 # STEP is milliseconds to run active simulation
-STEP = 100
+STEP = 150
 # REST_TIME is milliseconds to run rest for WTA and perform dopamine STDP
-REST_TIME = 40
-LEARN_TIME = 40
+LEARN_TIME = 20
+REST_TIME = 20
 # Noise constants
 NOISE_DA_NEURONS_WEIGHT = 0.01
 NOISE_ALL_STATES_WEIGHT = 0.01
@@ -29,7 +29,7 @@ NOISE_RATE = 65000.
 CRITIC_NOISE_RATE = 65500.
 REWARD_STIMULUS_RATE = 65000.
 STIMULUS_RATE = 65000.
-WTA_NOISE_RATE = 2500.
+WTA_NOISE_RATE = 3000.
 
 # ================================================
 nest.set_verbosity("M_WARNING")
@@ -46,8 +46,9 @@ possible_actions_str = ["LEFT", "DOWN", "RIGHT", "UP"]
 # env = gym.make('FrozenLake-v0')
 env = FrozenLakeEnv(desc=["SFF",
                           "FFH",
-                          "FFG"],is_slippery=False)
+                          "FFG"], is_slippery=False)
 # ================================================
+
 def plot_values(fig, ax, position):
     plt.cla()
 
@@ -166,25 +167,25 @@ nest.Connect(DA_neurons, vol_trans, 'all_to_all')
 reward_stimulus = nest.Create('poisson_generator', 1, {'rate': REWARD_STIMULUS_RATE})
 nest.Connect(reward_stimulus, DA_neurons, 'all_to_all', {'weight': 0.})
 
-tau_c = 50.0
-tau_n = 20.0
-tau_post = 20.
+tau_c = 300.0
+tau_n = 50.0
+tau_plus = 20.
 
 # Connect states to actions
 nest.CopyModel('stdp_dopamine_synapse', 'dopa_synapse', {
-    'vt': vol_trans.get('global_id'), 'A_plus': 4, 'A_minus': 0.5, "tau_plus": tau_post,
-    'Wmin': -10., 'Wmax': 20., 'b': 0., 'tau_n': tau_n, 'tau_c': tau_c})
+    'vt': vol_trans.get('global_id'), 'A_plus': 1, 'A_minus': 0.7, "tau_plus": tau_plus,
+    'Wmin': -10., 'Wmax': 10., 'b': 0., 'tau_n': tau_n, 'tau_c': tau_c})
 
 nest.Connect(all_states, all_actions, 'all_to_all', {'synapse_model': 'dopa_synapse', 'weight': 0.0})
 
 # TODO experimental: project from state to DA via critic 
 nest.CopyModel('stdp_dopamine_synapse', 'dopa_synapse_critic', {
-    'vt': vol_trans.get('global_id'), 'A_plus': 4, 'A_minus': 0.5, "tau_plus": tau_post,
-    'Wmin': -10., 'Wmax': 20., 'b': 0., 'tau_n': tau_n, 'tau_c': tau_c})
+    'vt': vol_trans.get('global_id'), 'A_plus': 1, 'A_minus': 0.7, "tau_plus": tau_plus,
+    'Wmin': -10., 'Wmax': 10., 'b': 0., 'tau_n': tau_n, 'tau_c': tau_c})
 
 critic = nest.Create('iaf_psc_alpha', 50)
 nest.Connect(all_states, critic, 'all_to_all', {'synapse_model': 'dopa_synapse_critic', 'weight': 0.0})
-nest.Connect(critic, DA_neurons, 'all_to_all', {'weight': -5., 'delay': 50.})
+nest.Connect(critic, DA_neurons, 'all_to_all', {'weight': -5., 'delay': 50})
 nest.Connect(critic, DA_neurons, 'all_to_all', {'weight': 5., 'delay': 1.})
 
 critic_noise = nest.Create('poisson_generator', 1, {'rate': CRITIC_NOISE_RATE})
@@ -225,7 +226,6 @@ recent_scores = deque(maxlen=100)
 prev_spikes = 0
 # run episodes
 for episode in range(NUM_EPISODES):
-
     nest.SetStatus(sd_actions, {"n_events": 0})
     nest.SetStatus(sd_wta, {"n_events": 0})
     nest.SetStatus(sd_states, {"n_events": 0})
